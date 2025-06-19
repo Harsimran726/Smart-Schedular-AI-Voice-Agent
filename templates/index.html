@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Scheduler Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #e3f2fd, #fce4ec);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      animation: backgroundFade 10s infinite alternate;
+    }
+    @keyframes backgroundFade {
+      from { background: linear-gradient(135deg, #e3f2fd, #fce4ec); }
+      to { background: linear-gradient(135deg, #c8e6c9, #f3e5f5); }
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 12px 50px rgba(0, 0, 0, 0.2);
+      width: 50%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: popIn 0.5s ease-in-out;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .chat-header {
+      background: linear-gradient(45deg, #1a73e8, #4285f4);
+      color: white;
+      padding: 24px;
+      text-align: center;
+    }
+    .chat-window {
+      height: 400px;
+      overflow-y: auto;
+      padding: 15px;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .message {
+      margin-bottom: 6px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      max-width: 75%;
+      line-height: 1.3;
+      font-size: 14px;
+      white-space: pre-wrap;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .message p {
+      margin: 0;
+      padding: 0;
+    }
+    .message p + p {
+      margin-top: 4px;
+    }
+    .user {
+      background: #d2e3fc;
+      align-self: flex-end;
+      text-align: right;
+      margin-left: auto;
+    }
+    .bot {
+      background: #e8eaed;
+      align-self: flex-start;
+      text-align: left;
+      padding-right: 32px;
+      margin-right: auto;
+    }
+    .speaker-btn {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      opacity: 0.7;
+      transition: opacity 0.3s;
+      padding: 4px;
+    }
+    .speaker-btn:hover {
+      opacity: 1;
+    }
+    .speaker-btn.playing {
+      color: #1a73e8;
+      animation: pulse 1s infinite;
+    }
+    .chat-input {
+      display: flex;
+      align-items: center;
+      padding: 16px;
+      background: #fff;
+      border-top: 1px solid #ddd;
+    }
+    .chat-input input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      font-size: 16px;
+    }
+    .chat-input button {
+      padding: 12px 18px;
+      margin-left: 10px;
+      border: none;
+      background: #1a73e8;
+      color: white;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s ease;
+    }
+    .chat-input button:hover {
+      background: #0c5adb;
+    }
+    .mic-btn {
+      background: #ff5252;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 12px;
+      margin-left: 10px;
+      cursor: pointer;
+      position: relative;
+    }
+    .mic-btn.listening::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      border: 3px solid white;
+      border-radius: 50%;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+    }
+    .typing {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #1a73e8;
+      margin: 0 2px;
+      animation: bounce 1s infinite alternate;
+    }
+    .typing:nth-child(2) { animation-delay: 0.2s; }
+    .typing:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to { transform: translateY(-8px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="chat-header">
+      <h2>📅 Smart Scheduler Agent</h2>
+      <p>Book a meeting with <strong>Harsimran Singh</strong></p>
+    </div>
+    <div class="chat-window" id="chat-window"></div>
+    <form class="chat-input" id="chat-form">
+      <input type="text" id="user-input" placeholder="Type your meeting request..." required />
+      <button type="submit">Send</button>
+      <button type="button" class="mic-btn" id="mic-btn">🎤</button>
+    </form>
+  </div>
+  <script>
+    const chatForm = document.getElementById('chat-form');
+    const userInput = document.getElementById('user-input');
+    const chatWindow = document.getElementById('chat-window');
+    const micBtn = document.getElementById('mic-btn');
+
+    let recognition;
+    let isListening = false;
+
+    function appendMessage(sender, text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('message', sender);
+      
+      if (sender === 'bot') {
+        // Add speaker button for bot messages
+        const speakerBtn = document.createElement('button');
+        speakerBtn.classList.add('speaker-btn');
+        speakerBtn.innerHTML = '🔊';
+        speakerBtn.onclick = async () => {
+          if (speakerBtn.classList.contains('playing')) return;
+          
+          try {
+            speakerBtn.classList.add('playing');
+            const response = await fetch('/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text })
+            });
+            
+            if (!response.ok) throw new Error('TTS failed');
+            
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            audio.onended = () => {
+              speakerBtn.classList.remove('playing');
+              URL.revokeObjectURL(audioUrl);
+            };
+            
+            await audio.play();
+          } catch (err) {
+            console.error('TTS error:', err);
+            speakerBtn.classList.remove('playing');
+          }
+        };
+        msgDiv.appendChild(speakerBtn);
+      }
+      
+      const contentSpan = document.createElement('span');
+      contentSpan.innerHTML = sender === 'bot' ? marked.parse(text) : text;
+      msgDiv.appendChild(contentSpan);
+      
+      chatWindow.appendChild(msgDiv);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    function showTyping() {
+      const typingDiv = document.createElement('div');
+      typingDiv.classList.add('message', 'bot');
+      typingDiv.innerHTML = '<span class="typing"></span><span class="typing"></span><span class="typing"></span>';
+      typingDiv.id = 'typing-indicator';
+      chatWindow.appendChild(typingDiv);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    function removeTyping() {
+      const typing = document.getElementById('typing-indicator');
+      if (typing) typing.remove();
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = userInput.value.trim();
+      if (!message) return;
+      appendMessage('user', message);
+      userInput.value = '';
+
+      showTyping();
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await response.json();
+        removeTyping();
+        appendMessage('bot', data.response);
+      } catch (err) {
+        removeTyping();
+        appendMessage('bot', '❌ Error booking the meeting. Please try again.');
+      }
+    });
+
+    micBtn.addEventListener('click', () => {
+      if (isListening) {
+        recognition.stop();
+        micBtn.classList.remove('listening');
+        isListening = false;
+        return;
+      }
+
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-IN';
+      micBtn.classList.add('listening');
+      isListening = true;
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const speechText = event.results[0][0].transcript;
+        userInput.value = speechText;
+      };
+
+      recognition.onend = () => {
+        micBtn.classList.remove('listening');
+        isListening = false;
+      };
+
+      recognition.onerror = (event) => {
+        micBtn.classList.remove('listening');
+        isListening = false;
+        alert('Voice recognition failed: ' + event.error);
+      };
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</body>
+</html>
